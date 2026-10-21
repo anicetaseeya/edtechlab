@@ -31,7 +31,11 @@ export default defineConfig({
     },
     {
       name: "phone",
-      use: { ...devices["Pixel 7"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 390, height: 844 },
+        hasTouch: true,
+      },
     },
   ],
 

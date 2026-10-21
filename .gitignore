@@ -25,6 +25,9 @@ next-env.d.ts
 /playwright/.cache/
 /blob-report/
 
+# generated evidence (screenshots, results, the PDF)
+/evidence/
+
 # vercel
 .vercel
 
