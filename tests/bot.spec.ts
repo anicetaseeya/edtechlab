@@ -154,6 +154,15 @@ test.describe("the grading bot path", () => {
     const consoleErrors: string[] = [];
     page.on("console", (m) => m.type() === "error" && consoleErrors.push(m.text()));
 
+    // Record which request failed, not just that one did, so a failure here
+    // says what to fix instead of only that something broke.
+    const failedRequests: string[] = [];
+    page.on("response", (r) => {
+      if (r.status() >= 400) {
+        failedRequests.push(`${r.status()} ${r.request().method()} ${r.url().replace(/\?.*$/, "")}`);
+      }
+    });
+
     // 1 — the public landing page
     await ev.step(page, "Landing page loads for a stranger", async () => {
       await page.goto("/");
@@ -260,14 +269,18 @@ test.describe("the grading bot path", () => {
     });
     await other.close();
 
+    const diagnosis =
+      consoleErrors.join(" | ") +
+      (failedRequests.length ? `  [failed requests: ${failedRequests.join(", ")}]` : "");
+
     ev.record(
       "No browser console errors during the run",
       consoleErrors.length === 0 ? "PASS" : "FAIL",
       consoleErrors.length === 0
         ? "the browser console stayed clean throughout"
-        : consoleErrors.join(" | ").slice(0, 200),
+        : diagnosis.slice(0, 300),
     );
-    expect(consoleErrors, consoleErrors.join(" | ")).toEqual([]);
+    expect(consoleErrors, diagnosis).toEqual([]);
   });
 
   test("logged out, /app and /apply redirect to /login", async ({ browser }, testInfo) => {

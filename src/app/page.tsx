@@ -38,7 +38,8 @@ export default function LandingPage() {
         <p className="sub">
           IEU Labs helps IE students get a fair lab place and track every session so they never
           miss one. IE Labs are the hands-on, term-long projects where small student teams work
-          with a real company, NGO or start-up alongside their degree.
+          with real organisations such as companies, NGOs, start-ups or public bodies alongside
+          their degree.
         </p>
         <div className="hero-actions">
           <Link href="/signup" className="btn btn-lg">

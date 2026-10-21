@@ -512,8 +512,11 @@ textarea:focus {
 
 /* ---------- landing ---------- */
 
+/* Longhand on purpose: the shorthand would reset the 16px side padding
+   this element inherits from .wrap and let the hero touch the screen edge. */
 .hero {
-  padding: 40px 0 8px;
+  padding-top: 40px;
+  padding-bottom: 8px;
 }
 
 .hero p.sub {
