@@ -5,8 +5,10 @@ import { config as loadEnv } from "dotenv";
 loadEnv({ path: ".env.local" });
 
 // Run against your live site with:  BASE_URL=https://your-app.vercel.app npm test
+// With no BASE_URL, Playwright starts `npm run dev` for you on port 3000.
+// If you set BASE_URL (even to localhost), you are running the server yourself.
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
-const isLocal = BASE_URL.includes("localhost");
+const autoServer = !process.env.BASE_URL;
 
 export default defineConfig({
   testDir: "./tests",
@@ -33,7 +35,7 @@ export default defineConfig({
     },
   ],
 
-  webServer: isLocal
+  webServer: autoServer
     ? {
         command: "npm run dev",
         url: "http://localhost:3000",

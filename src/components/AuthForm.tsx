@@ -1,74 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { supabaseConfigured } from "@/lib/supabase/env";
+import { useActionState, useState } from "react";
+import { signInAction, signUpAction, type AuthState } from "@/app/auth/actions";
 
 export default function AuthForm({ mode }: { mode: "signup" | "login" }) {
   const isSignup = mode === "signup";
+
+  // The form posts to a server action, so it works even if the page has not
+  // finished loading its JavaScript yet.
+  const [state, formAction, pending] = useActionState<AuthState, FormData>(
+    isSignup ? signUpAction : signInAction,
+    null,
+  );
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (busy) return;
-    setError(null);
-
-    if (!supabaseConfigured) {
-      setError("The app is not connected to its database yet. Please try again later.");
-      return;
-    }
-
-    setBusy(true);
-    const supabase = createClient();
-
-    try {
-      if (isSignup) {
-        const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
-
-        if (signUpError) {
-          setError(signUpError.message);
-          setBusy(false);
-          return;
-        }
-
-        // Email confirmation is off, so a session comes back straight away.
-        // If it ever does not, sign in with the same details.
-        if (!data.session) {
-          const { error: signInError } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
-          if (signInError) {
-            setError(signInError.message);
-            setBusy(false);
-            return;
-          }
-        }
-      } else {
-        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-        if (signInError) {
-          setError(
-            signInError.message === "Invalid login credentials"
-              ? "That email and password do not match. Please try again."
-              : signInError.message,
-          );
-          setBusy(false);
-          return;
-        }
-      }
-    } catch {
-      setError("Something went wrong. Please check your connection and try again.");
-      setBusy(false);
-      return;
-    }
-
-    // A full page load so the server sees the new session cookie right away.
-    window.location.assign("/app");
-  }
 
   return (
     <div className="wrap-narrow" style={{ paddingTop: 24 }}>
@@ -79,13 +26,13 @@ export default function AuthForm({ mode }: { mode: "signup" | "login" }) {
           : "Welcome back. Log in to see your lab week."}
       </p>
 
-      {error && (
+      {state?.error && (
         <p className="msg msg-error" role="alert">
-          {error}
+          {state.error}
         </p>
       )}
 
-      <form onSubmit={onSubmit} noValidate>
+      <form action={formAction}>
         <div className="field">
           <label htmlFor={`${mode}-email`}>Email address</label>
           <input
@@ -120,9 +67,9 @@ export default function AuthForm({ mode }: { mode: "signup" | "login" }) {
           type="submit"
           className="btn btn-block btn-lg"
           data-testid={`${mode}-submit`}
-          disabled={busy}
+          disabled={pending}
         >
-          {busy ? "Please wait…" : isSignup ? "Sign up" : "Log in"}
+          {pending ? "Please wait…" : isSignup ? "Sign up" : "Log in"}
         </button>
       </form>
 

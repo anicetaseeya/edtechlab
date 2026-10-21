@@ -1,22 +1,9 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import { supabaseConfigured } from "@/lib/supabase/env";
+import { getCurrentUser } from "@/lib/supabase/user";
 import LogoutButton from "./LogoutButton";
 
 export default async function SiteHeader() {
-  let signedIn = false;
-
-  if (supabaseConfigured) {
-    try {
-      const supabase = await createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      signedIn = Boolean(user);
-    } catch {
-      signedIn = false;
-    }
-  }
+  const signedIn = Boolean(await getCurrentUser());
 
   return (
     <header className="site-header">

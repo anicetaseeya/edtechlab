@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { addEntryAction } from "@/app/app/actions";
 import { ENTRY_TYPES, type Entry, type EntryType } from "@/lib/types";
 import {
   defaultEntryDate,
@@ -44,22 +45,25 @@ function sortEntries(list: Entry[]): Entry[] {
   });
 }
 
-export default function LabWeek() {
+export default function LabWeek({ initialEntries = [] }: { initialEntries?: Entry[] }) {
   const supabase = useMemo(() => createClient(), []);
   const titleRef = useRef<HTMLInputElement>(null);
 
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [entries, setEntries] = useState<Entry[]>(() => sortEntries(initialEntries));
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [filter, setFilter] = useState<"All" | EntryType>("All");
   const [form, setForm] = useState(EMPTY_FORM);
 
   const today = madridToday();
 
+  // Only the newest load may write to the list: a slow earlier request must
+  // never overwrite entries added since it was sent.
+  const loadSeq = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoadError(null);
     const { data, error } = await supabase
       .from("entries")
@@ -67,60 +71,42 @@ export default function LabWeek() {
       .order("entry_date", { ascending: true })
       .order("entry_time", { ascending: true, nullsFirst: true });
 
+    if (seq !== loadSeq.current) return;
+
     if (error) {
       setLoadError("We could not load your lab week. Check your connection and try again.");
     } else {
       setEntries(sortEntries((data ?? []) as Entry[]));
     }
-    setLoading(false);
   }, [supabase]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  async function addEntry(e: React.FormEvent) {
-    e.preventDefault();
-    if (saving) return;
+  // The add form posts to a server action, so it still saves if the page has
+  // not finished loading its JavaScript. React takes over once it has.
+  const [addState, addAction, saving] = useActionState(addEntryAction, null);
+  const appliedAt = useRef(0);
 
-    const title = form.title.trim();
-    if (!title) {
-      setSaveError("Please write a short title first.");
-      titleRef.current?.focus();
+  useEffect(() => {
+    if (!addState || addState.at === appliedAt.current) return;
+    appliedAt.current = addState.at;
+
+    if (!addState.ok || !addState.entry) {
+      setSaveError(addState.error ?? "We could not save that entry. Please try again.");
       return;
     }
 
-    setSaving(true);
+    // Drop any copy a load in flight may already have added, so an entry can
+    // never appear twice.
+    const saved = addState.entry;
     setSaveError(null);
-
-    const { data, error } = await supabase
-      .from("entries")
-      .insert({
-        title,
-        type: form.type,
-        entry_date: form.entry_date || defaultEntryDate(),
-        entry_time: form.entry_time || null,
-        place: form.place.trim() || null,
-        meeting_link: form.meeting_link.trim() || null,
-        notes: form.notes.trim() || null,
-        mandatory: form.mandatory,
-        tbc: form.tbc,
-      })
-      .select()
-      .single();
-
-    if (error || !data) {
-      setSaveError("We could not save that entry. Please try again.");
-      setSaving(false);
-      return;
-    }
-
-    setEntries((prev) => sortEntries([...prev, data as Entry]));
+    setEntries((prev) => sortEntries([...prev.filter((x) => x.id !== saved.id), saved]));
     setForm(EMPTY_FORM());
     setShowMore(false);
-    setSaving(false);
     titleRef.current?.focus();
-  }
+  }, [addState]);
 
   const saveEntry = useCallback(
     async (id: string, patch: Partial<Entry>) => {
@@ -185,9 +171,7 @@ export default function LabWeek() {
         <p className="eyebrow" id="nextup">
           Next up
         </p>
-        {loading ? (
-          <p style={{ margin: 0 }}>Loading…</p>
-        ) : nextUp ? (
+        {nextUp ? (
           <>
             <p className="entry-title" style={{ marginBottom: 2 }}>
               {nextUp.title}
@@ -238,13 +222,14 @@ export default function LabWeek() {
           </p>
         )}
 
-        <form onSubmit={addEntry}>
+        <form action={addAction}>
           <div className="field">
             <label htmlFor="core-input">What is it? (title)</label>
             <input
               id="core-input"
               data-testid="core-input"
               ref={titleRef}
+              name="title"
               type="text"
               required
               maxLength={200}
@@ -262,6 +247,7 @@ export default function LabWeek() {
               <label htmlFor="entry-type">Type</label>
               <select
                 id="entry-type"
+                name="type"
                 value={form.type}
                 onChange={(e) => setForm({ ...form, type: e.target.value as EntryType })}
               >
@@ -276,6 +262,7 @@ export default function LabWeek() {
               <label htmlFor="entry-date">Date</label>
               <input
                 id="entry-date"
+                name="entry_date"
                 type="date"
                 required
                 value={form.entry_date}
@@ -301,6 +288,7 @@ export default function LabWeek() {
                 <label htmlFor="entry-time">Time (optional)</label>
                 <input
                   id="entry-time"
+                  name="entry_time"
                   type="time"
                   value={form.entry_time}
                   onChange={(e) => setForm({ ...form, entry_time: e.target.value })}
@@ -310,6 +298,7 @@ export default function LabWeek() {
                 <label htmlFor="entry-place">Place (optional)</label>
                 <input
                   id="entry-place"
+                  name="place"
                   type="text"
                   placeholder="Online, Madrid, Segovia or a room"
                   value={form.place}
@@ -322,6 +311,7 @@ export default function LabWeek() {
               <label htmlFor="entry-link">Meeting link (optional)</label>
               <input
                 id="entry-link"
+                name="meeting_link"
                 type="url"
                 placeholder="https://…"
                 value={form.meeting_link}
@@ -333,6 +323,7 @@ export default function LabWeek() {
               <label htmlFor="entry-notes">Notes (optional)</label>
               <textarea
                 id="entry-notes"
+                name="notes"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
               />
@@ -342,6 +333,7 @@ export default function LabWeek() {
               <label className="check" htmlFor="entry-mandatory">
                 <input
                   id="entry-mandatory"
+                  name="mandatory"
                   type="checkbox"
                   checked={form.mandatory}
                   onChange={(e) => setForm({ ...form, mandatory: e.target.checked })}
@@ -351,6 +343,7 @@ export default function LabWeek() {
               <label className="check" htmlFor="entry-tbc">
                 <input
                   id="entry-tbc"
+                  name="tbc"
                   type="checkbox"
                   checked={form.tbc}
                   onChange={(e) => setForm({ ...form, tbc: e.target.checked })}
@@ -416,9 +409,7 @@ export default function LabWeek() {
           </p>
         )}
 
-        {loading ? (
-          <p>Loading your entries…</p>
-        ) : entries.length === 0 ? (
+        {entries.length === 0 ? (
           <p className="msg msg-info">
             Nothing here yet — add your first session, meeting or deadline above.
           </p>

@@ -188,10 +188,13 @@ create policy results_select_own on public.results
 -- 3. GRANTS — the anon (publishable) key gets nothing at all.
 -- ---------------------------------------------------------------------
 
+-- Start from nothing for both browser roles, then hand back only what the
+-- app actually needs. public.lottery is left out on purpose: no role reaches
+-- it through the API at all, on top of RLS having no policy for it.
 revoke all on public.entries, public.lab_seats, public.rounds,
                public.applications, public.lottery, public.rankings,
                public.results
-  from anon;
+  from anon, authenticated;
 
 grant select, insert, update, delete on public.entries   to authenticated;
 grant select, insert, update, delete on public.rankings  to authenticated;

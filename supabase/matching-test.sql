@@ -112,7 +112,7 @@ c4 as (
     join latem l on l.uid = b.uid
 )
 
-select 1 as n, 'No lab is over capacity'                        as check,
+select 1 as n, 'No lab is over capacity'                        as "check",
        case when ok then 'PASS' else 'FAIL' end as result, detail from c1
 union all
 select 2, 'Lottery order is respected',
